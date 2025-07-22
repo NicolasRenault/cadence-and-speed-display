@@ -1,64 +1,123 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000"
-    android:padding="32dp"
+    android:background="#1A1A1A"
+    android:padding="24dp"
     tools:context=".MainActivity">
 
-    <Button
-        android:id="@+id/btnSelectDevice"
-        android:layout_width="match_parent"
+    <!-- Speed Display -->
+    <TextView
+        android:id="@+id/tvSpeedLabel"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Start"
-        android:textColor="#FFFFFF"
-        android:backgroundTint="#1E88E5"
-        android:textSize="18sp"
-        android:layout_alignParentTop="true"
-        android:layout_marginTop="32dp"/>
+        android:text="SPEED"
+        android:textColor="#A0A0A0"
+        android:textSize="40sp"
+        app:layout_constraintHorizontal_bias="0.5"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/tvSpeed"
+        app:layout_constraintVertical_chainStyle="packed"
+        android:layout_marginTop="48dp"/>
 
+    <TextView
+        android:id="@+id/tvSpeed"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="--"
+        android:textColor="#FFFFFF"
+        android:textSize="80sp"
+        android:textStyle="bold"
+        app:layout_constraintTop_toBottomOf="@id/tvSpeedLabel"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_chainStyle="packed"
+        app:layout_constraintHorizontal_bias="0.5"/>
+
+    <TextView
+        android:id="@+id/tvSpeedUnit"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="km/h"
+        android:textColor="#A0A0A0"
+        android:textSize="30sp"
+        app:layout_constraintTop_toBottomOf="@id/tvSpeed"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.5"/>
+
+
+    <!-- Cadence Display -->
+    <TextView
+        android:id="@+id/tvCadenceLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="CADENCE"
+        android:textColor="#A0A0A0"
+        android:textSize="40sp"
+        app:layout_constraintTop_toBottomOf="@+id/tvSpeedUnit"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="120dp" />
+
+    <TextView
+        android:id="@+id/tvCadence"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="--"
+        android:textColor="#FFFFFF"
+        android:textSize="80sp"
+        android:textStyle="bold"
+        app:layout_constraintTop_toBottomOf="@id/tvCadenceLabel"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_chainStyle="packed"
+        app:layout_constraintHorizontal_bias="0.5"/>
+
+    <TextView
+        android:id="@+id/tvCadenceUnit"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="RPM"
+        android:textColor="#A0A0A0"
+        android:textSize="30sp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvCadence"
+        app:layout_constraintHorizontal_bias="0.5"/>
+
+
+    <!-- Buttons at the bottom -->
     <Button
         android:id="@+id/btnDisconnect"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:text="Disconnect"
         android:textColor="#FFFFFF"
-        android:backgroundTint="#D32F2F"
+        android:backgroundTint="#C62828"
         android:textSize="18sp"
-        android:layout_below="@id/btnSelectDevice"
-        android:layout_marginTop="32dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="16dp"
         android:visibility="gone" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
+    <Button
+        android:id="@+id/btnSelectDevice"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:layout_centerInParent="true"
-        android:gravity="center_horizontal">
+        android:text="Start"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#0277BD"
+        android:textSize="18sp"
+        app:layout_constraintBottom_toTopOf="@id/btnDisconnect"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="8dp"
+        android:visibility="visible"/>
 
-        <TextView
-            android:id="@+id/tvSpeed"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:padding="8dp"
-            android:text="Speed: -- km/h"
-            android:textColor="#FFFFFF"
-            android:textSize="36sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/tvCadence"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Cadence: -- RPM"
-            android:textColor="#FFFFFF"
-            android:textSize="36sp"
-            android:textStyle="bold"
-            android:padding="8dp"/>
-
-
-    </LinearLayout>
-
-</RelativeLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

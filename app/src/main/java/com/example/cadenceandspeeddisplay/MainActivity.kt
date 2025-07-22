@@ -26,6 +26,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import java.util.UUID
+import com.google.android.gms.location.*
 
 
 class MainActivity : AppCompatActivity() {
@@ -53,8 +54,8 @@ class MainActivity : AppCompatActivity() {
     private var currentCadence: Double = 0.0
 
     // GPS and Speed related variables
-    private lateinit var locationManager: LocationManager
-    private var currentSpeedKmh: Double = 0.0
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private lateinit var locationCallback: LocationCallback
 
     private val cadenceTimeoutHandler = Handler(Looper.getMainLooper())
     private var cadenceTimeoutRunnable: Runnable? = null
@@ -72,10 +73,8 @@ class MainActivity : AppCompatActivity() {
         tvCadence = findViewById(R.id.tvCadence)
         tvSpeed = findViewById(R.id.tvSpeed)
 
-        tvCadence.text = "Cadence: -- RPM"
-        tvSpeed.text = "Speed: -- km/h"
-
-        locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        tvCadence.text = "--"
+        tvSpeed.text = "--"
 
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?
         bluetoothAdapter = bluetoothManager?.adapter ?: run {
@@ -118,7 +117,39 @@ class MainActivity : AppCompatActivity() {
             disconnectDevice()
         }
 
-        startLocationUpdates() // Start GPS
+        //Speed
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
+            return
+        }
+
+        val locationRequest = LocationRequest.Builder(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            2000L // interval
+        ).apply {
+            setMinUpdateIntervalMillis(1000L) // fastest interval
+        }.build()
+
+        locationCallback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                result.lastLocation?.let { location ->
+                    if (location.hasSpeed()) {
+                        val speedFloat = location.speed * 3.6f
+                        val speed = speedFloat.toInt()
+
+                        Log.d(TAG, "Speed (Float): $speedFloat km/h, Speed (Int): $speed km/h")
+                        tvSpeed.text = "$speed"
+                    } else {
+                        Log.d(TAG, "Location has no speed.")
+                        tvSpeed.text = "N/A" // Or keep "GPS Wait" if it's still waiting for a fix with speed
+                    }
+                }
+            }
+        }
+
+        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, mainLooper)
     }
 
     private fun requestPermissionsIfNeeded() {
@@ -394,112 +425,14 @@ class MainActivity : AppCompatActivity() {
         previousCrankRevolutions = -1
         previousCrankEventTime = -1
         currentCadence = 0.0
-        currentSpeedKmh = 0.0
         runOnUiThread {
-            tvCadence.text = "Cadence: -- RPM"
-            //tvSpeed.text = "Speed: -- km/h" // Or "Speed: GPS Wait..."
+            tvCadence.text = "--"
         }
 
         bluetoothGatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
         } else {
             device.connectGatt(this, false, gattCallback)
-        }
-    }
-
-    private val locationListener: LocationListener = object : LocationListener {
-        override fun onLocationChanged(location: Location) {
-            // location.speed is in meters/second
-            currentSpeedKmh = location.speed * 3.6 // Convert m/s to km/h
-            Log.d(TAG, "GPS Speed: ${String.format("%.1f", currentSpeedKmh)} km/h, Accuracy: ${location.accuracy}m, Provider: ${location.provider}")
-            runOnUiThread {
-                tvSpeed.text = "Speed: ${String.format("%.1f", currentSpeedKmh)} km/h"
-            }
-        }
-
-        @Deprecated("Deprecated in API level 29", ReplaceWith(""))
-        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {
-            Log.d(TAG, "GPS Status Changed: $provider, Status: $status")
-            // You could update UI here, e.g., if status is OUT_OF_SERVICE or TEMPORARILY_UNAVAILABLE
-        }
-
-        override fun onProviderEnabled(provider: String) {
-            Log.d(TAG, "GPS Provider Enabled: $provider")
-            runOnUiThread {
-                // tvSpeed.text = "Speed: GPS Wait..." // Already handled by startLocationUpdates
-                Toast.makeText(this@MainActivity, "$provider enabled.", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        override fun onProviderDisabled(provider: String) {
-            Log.d(TAG, "GPS Provider Disabled: $provider")
-            runOnUiThread {
-                currentSpeedKmh = 0.0
-                tvSpeed.text = "Speed: GPS OFF"
-                Toast.makeText(this@MainActivity, "$provider disabled. Enable Location Services.", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun startLocationUpdates() {
-        if (!hasLocationPermission()) {
-            Log.w(TAG, "ACCESS_FINE_LOCATION permission not granted. Cannot start location updates.")
-            Toast.makeText(this, "Location permission needed for GPS speed.", Toast.LENGTH_SHORT).show()
-            requestPermissionsIfNeeded() // Prompt again if not granted
-            runOnUiThread { tvSpeed.text = "Speed: NoPerm" }
-            return
-        }
-
-        try {
-            var providerAvailable = false
-            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER,
-                    1000L, // Minimum time interval between updates (milliseconds) -> 1 second
-                    1f,    // Minimum distance between updates (meters) -> 1 meter
-                    locationListener,
-                    Looper.getMainLooper() // Ensure callbacks on main looper for UI updates
-                )
-                Log.i(TAG, "Requested GPS location updates.")
-                runOnUiThread { tvSpeed.text = "Speed: GPS Wait..." }
-                providerAvailable = true
-            } else if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                // Fallback to Network Provider if GPS is off, less accurate for speed
-                locationManager.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER,
-                    2000L, // Update less frequently for network
-                    5f,    // Larger distance threshold
-                    locationListener,
-                    Looper.getMainLooper()
-                )
-                Log.i(TAG, "Requested Network location updates as GPS is off.")
-                runOnUiThread { tvSpeed.text = "Speed: Net Wait..." }
-                providerAvailable = true
-            }
-
-            if (!providerAvailable) {
-                Log.w(TAG, "No location providers (GPS or Network) are enabled.")
-                Toast.makeText(this, "Please enable Location Services (GPS or Network).", Toast.LENGTH_LONG).show()
-                runOnUiThread { tvSpeed.text = "Speed: Loc OFF" }
-            }
-        } catch (ex: SecurityException) { // Should be caught by hasLocationPermission, but defensive
-            Log.e(TAG, "Security exception, GPS permission not granted or provider unavailable.", ex)
-            Toast.makeText(this, "GPS permission denied. Cannot get speed.", Toast.LENGTH_SHORT).show()
-            runOnUiThread { tvSpeed.text = "Speed: NoPerm" }
-        } catch (e: IllegalArgumentException) { // If provider string is invalid
-            Log.e(TAG, "GPS provider argument issue: ${e.message}")
-            Toast.makeText(this, "Location provider not available.", Toast.LENGTH_SHORT).show()
-            runOnUiThread { tvSpeed.text = "Speed: NoProv" }
-        }
-    }
-
-    private fun stopLocationUpdates() {
-        try {
-            locationManager.removeUpdates(locationListener)
-            Log.i(TAG, "Stopped location updates.")
-        } catch (ex: Exception) { // Catch broad exception for safety
-            Log.e(TAG, "Error stopping location updates: ${ex.message}")
         }
     }
 
@@ -547,9 +480,7 @@ class MainActivity : AppCompatActivity() {
                     btnSelectDevice.isEnabled = true
                     btnSelectDevice.visibility = View.VISIBLE
                     btnSelectDevice.text = "Start"
-                    tvCadence.text = "Cadence: -- RPM"
-                    //currentSpeedKmh = 0.0 // Reset speed value
-                    //tvSpeed.text = "Speed: -- km/h"  // Reset speed display
+                    tvCadence.text = "--"
                 }
                 autoConnecting = false
                 try {
@@ -569,7 +500,6 @@ class MainActivity : AppCompatActivity() {
                 previousCrankRevolutions = -1
                 previousCrankEventTime = -1
                 currentCadence = 0.0
-                // currentSpeedKmh is already reset above
             }
         }
 
@@ -657,7 +587,7 @@ class MainActivity : AppCompatActivity() {
                         Log.i(TAG, "Initial cadence data did not arrive within ${CADENCE_STALE_DATA_TIMEOUT_MS}ms. Setting cadence to 0 RPM.")
                         currentCadence = 0.0
                         runOnUiThread {
-                            tvCadence.text = "Cadence: 0.0 RPM" // Or "Cadence: -- RPM" until first valid data
+                            tvCadence.text = "0" // Or "Cadence: -- RPM" until first valid data
                         }
                     }
                     cadenceTimeoutHandler.postDelayed(cadenceTimeoutRunnable!!, CADENCE_STALE_DATA_TIMEOUT_MS)
@@ -713,12 +643,12 @@ class MainActivity : AppCompatActivity() {
                                 if (crankTimeDelta > 0 && crankRevolutionDelta > 0) {
                                     val timeDeltaSeconds = crankTimeDelta / 1024.0
                                     currentCadence = (crankRevolutionDelta / timeDeltaSeconds) * 60.0
-                                    Log.d(TAG, "Cadence updated: ${String.format("%.1f", currentCadence)} RPM")
+                                    Log.d(TAG, "Cadence updated: ${currentCadence} RPM")
                                     processedNewDistinctCrankData = true // Valid new data processed
                                 } else if (crankTimeDelta > 0 && crankRevolutionDelta == 0) {
                                     // Time progressed, no new revolutions. Cadence doesn't change here,
                                     // but sensor is active. If this is different from previous, it's "new".
-                                    Log.d(TAG, "Crank time progressed, no new revolutions. Last cadence: ${String.format("%.1f", currentCadence)} RPM.")
+                                    Log.d(TAG, "Crank time progressed, no new revolutions. Last cadence: ${currentCadence} RPM.")
                                     // We consider this "new" data if the event time changed, indicating sensor activity.
                                     if (currentCrankEventTimeData != previousCrankEventTime) {
                                         processedNewDistinctCrankData = true
@@ -745,7 +675,7 @@ class MainActivity : AppCompatActivity() {
 
                     if (processedNewDistinctCrankData) {
                         runOnUiThread {
-                            tvCadence.text = "Cadence: ${String.format("%.1f", currentCadence)} RPM"
+                            tvCadence.text = "${currentCadence.toInt()}"
                         }
 
                         cadenceTimeoutRunnable?.let { runnable ->
@@ -756,7 +686,7 @@ class MainActivity : AppCompatActivity() {
                             Log.i(TAG, "Cadence timed out after ${CADENCE_STALE_DATA_TIMEOUT_MS}ms (no new *distinct* crank data). Setting cadence to 0 RPM.")
                             currentCadence = 0.0
                             runOnUiThread {
-                                tvCadence.text = "Cadence: 0.0 RPM"
+                                tvCadence.text = "0"
                             }
                         }
 
@@ -793,7 +723,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         stopBleScan()
-        stopLocationUpdates() // Stop GPS updates
 
         // Check for BLUETOOTH_CONNECT before gatt operations on S+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
