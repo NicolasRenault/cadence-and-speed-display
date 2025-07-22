@@ -33,7 +33,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bluetoothAdapter: BluetoothAdapter
     private val foundDevices = mutableMapOf<String, BluetoothDevice>()
     private val REQUEST_PERMISSION_ALL = 1 // Combined request code
-    private val SCAN_PERIOD: Long = 15000 // 15 seconds scan period
+    private val SCAN_PERIOD: Long = 10000 // 10 seconds scan period
 
     private val handler = Handler(Looper.getMainLooper())
     private var scanning = false
@@ -676,15 +676,6 @@ class MainActivity : AppCompatActivity() {
             if (characteristic.uuid == YOUR_CHARACTERISTIC_UUID) {
                 val data = characteristic.value
 
-                // --- Cadence Timeout Management: Part 1 ---
-                // ALWAYS remove the previous timeout callback when a new packet arrives for this characteristic.
-                // This runnable, if it executes, means 3 seconds have passed since the last packet
-                // (or since the app started listening) without new *valid* crank data being processed to update cadence.
-                cadenceTimeoutRunnable?.let { runnable ->
-                    cadenceTimeoutHandler.removeCallbacks(runnable)
-                }
-                // --- End of Cadence Timeout Management: Part 1 ---
-
                 var processedNewDistinctCrankData = false // Flag to track if we got usable crank data in *this* packet
 
                 if (data.isNotEmpty()) {
@@ -756,6 +747,22 @@ class MainActivity : AppCompatActivity() {
                         runOnUiThread {
                             tvCadence.text = "Cadence: ${String.format("%.1f", currentCadence)} RPM"
                         }
+
+                        cadenceTimeoutRunnable?.let { runnable ->
+                            cadenceTimeoutHandler.removeCallbacks(runnable)
+                        }
+
+                        cadenceTimeoutRunnable = Runnable {
+                            Log.i(TAG, "Cadence timed out after ${CADENCE_STALE_DATA_TIMEOUT_MS}ms (no new *distinct* crank data). Setting cadence to 0 RPM.")
+                            currentCadence = 0.0
+                            runOnUiThread {
+                                tvCadence.text = "Cadence: 0.0 RPM"
+                            }
+                        }
+
+                        cadenceTimeoutHandler.postDelayed(cadenceTimeoutRunnable!!, CADENCE_STALE_DATA_TIMEOUT_MS)
+
+
                         // If new distinct crank data was processed, the fact that we cancelled the timeout
                         // at the start of this method and will re-schedule it below effectively "resets" it
                         // for another 3 seconds *from this point of valid data*.
@@ -770,21 +777,7 @@ class MainActivity : AppCompatActivity() {
                     Log.w(TAG, "Received empty data packet for characteristic ${characteristic.uuid}")
                     // No new distinct crank data here either. Timeout continues.
                 }
-
-                // --- Cadence Timeout Management: Part 2 ---
-                // ALWAYS re-schedule the timeout.
-                // If 'processedNewDistinctCrankData' was true, this new timeout starts from "now".
-                // If 'processedNewDistinctCrankData' was false, this means the previous 3-second window
-                // (or less, if packets are frequent but invalid) continues. If enough such "invalid" packets
-                // arrive or enough time passes without a "valid" one, the runnable executes.
-                cadenceTimeoutRunnable = Runnable {
-                    Log.i(TAG, "Cadence timed out after ${CADENCE_STALE_DATA_TIMEOUT_MS}ms (no new *distinct* crank data). Setting cadence to 0 RPM.")
-                    currentCadence = 0.0
-                    runOnUiThread {
-                        tvCadence.text = "Cadence: 0.0 RPM"
-                    }
-                }
-                cadenceTimeoutHandler.postDelayed(cadenceTimeoutRunnable!!, CADENCE_STALE_DATA_TIMEOUT_MS)
+                //cadenceTimeoutHandler.postDelayed(cadenceTimeoutRunnable!!, CADENCE_STALE_DATA_TIMEOUT_MS)
                 // --- End of Cadence Timeout Management: Part 2 ---
             }
         }
