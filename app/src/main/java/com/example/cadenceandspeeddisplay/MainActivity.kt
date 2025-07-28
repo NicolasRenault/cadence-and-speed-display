@@ -29,6 +29,7 @@ import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -54,7 +55,8 @@ import kotlin.math.roundToInt
 val CYCLING_SPEED_AND_CADENCE_SERVICE_UUID: UUID = UUID.fromString("00001816-0000-1000-8000-00805f9b34fb")
 val CSC_MEASUREMENT_CHARACTERISTIC_UUID: UUID = UUID.fromString("00002a5b-0000-1000-8000-00805f9b34fb")
 val CLIENT_CHARACTERISTIC_CONFIG_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-
+val BATTERY_SERVICE_UUID: UUID = UUID.fromString("0000180F-0000-1000-8000-00805f9b34fb")
+val BATTERY_LEVEL_UUID: UUID = UUID.fromString("00002A19-0000-1000-8000-00805f9b34fb")
 
 class MainActivity : AppCompatActivity() {
 
@@ -109,6 +111,9 @@ class MainActivity : AppCompatActivity() {
 
     lateinit var btnSelectDevice: Button
     lateinit var btnDisconnect: Button
+
+    lateinit var ivBatteryIcon: ImageView
+    lateinit var tvBatteryText: TextView
 
     // Session and Timer Variables
     private var sessionStartTime: Long = 0L
@@ -166,6 +171,9 @@ class MainActivity : AppCompatActivity() {
 
         btnSelectDevice = findViewById(R.id.btnSelectDevice)
         btnDisconnect = findViewById(R.id.btnDisconnect)
+
+        ivBatteryIcon= findViewById(R.id.ivBatteryIcon)
+        tvBatteryText = findViewById(R.id.tvBatteryLevel)
 
         // Initialize Bluetooth
         bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -556,6 +564,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
+        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+            if (characteristic.uuid == BATTERY_LEVEL_UUID) {
+                val batteryLevel = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0)
+
+                runOnUiThread {
+                    tvBatteryText.text = "$batteryLevel%"
+                    ivBatteryIcon.setImageResource(getBatteryIconRes(batteryLevel))
+                    Toast.makeText(this@MainActivity, "Battery Level: $batteryLevel%", Toast.LENGTH_SHORT).show()
+                }
+                enableCscMeasurementNotifications(gatt)
+            }
+        }
+
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             val deviceAddress = gatt.device.address
@@ -603,6 +624,13 @@ class MainActivity : AppCompatActivity() {
                 Log.w(TAG, "No BLUETOOTH_CONNECT permission during onServicesDiscovered for ${gatt.device.address}.")
                 disconnectDeviceInternal(gatt)
                 return
+            }
+
+            //Battery reading
+            val batteryService = gatt.getService(BATTERY_SERVICE_UUID)
+            val batteryChar = batteryService?.getCharacteristic(BATTERY_LEVEL_UUID)
+            if (batteryChar != null) {
+                gatt.readCharacteristic(batteryChar)
             }
 
             if (status == BluetoothGatt.GATT_SUCCESS) {
@@ -904,6 +932,9 @@ class MainActivity : AppCompatActivity() {
         tvAvgCadence.text = "--"
         tvMaxCadence.text = "--"
         tvTimerValue.text = "00:00:00"
+
+        tvBatteryText.text = "--%"
+        ivBatteryIcon.setImageResource(R.drawable.ic_bluetooth_unknown_24dp)
     }
 
     private fun resetMetrics() {
@@ -1035,4 +1066,20 @@ class MainActivity : AppCompatActivity() {
             bluetoothGatt = null
         }
     }
+
+
+    fun getBatteryIconRes(batteryLevel: Int?): Int {
+        Log.d(TAG, "getBatteryIconRes called with batteryLevel: $batteryLevel")
+        return when {
+            batteryLevel == null -> R.drawable.ic_battery_unknown_24dp
+            batteryLevel <= 10 -> R.drawable.ic_battery_alert_24dp
+            batteryLevel <= 30 -> R.drawable.ic_battery_20_24dp
+            batteryLevel <= 50 -> R.drawable.ic_battery_40_24dp
+            batteryLevel <= 70 -> R.drawable.ic_battery_60_24dp
+            batteryLevel <= 99 -> R.drawable.ic_battery_80_24dp
+            batteryLevel <= 100 -> R.drawable.ic_battery_full_24dp
+            else -> R.drawable.ic_battery_unknown_24dp
+        }
+    }
+
 }
