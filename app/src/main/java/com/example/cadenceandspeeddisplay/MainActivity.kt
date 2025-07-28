@@ -129,6 +129,11 @@ class MainActivity : AppCompatActivity() {
     private var cadenceReadingsCount = 0
     private var currentMaxCadenceRpm = 0.0
 
+    //Cadence timeout
+    private val cadenceTimeoutHandler = Handler(Looper.getMainLooper())
+    private var cadenceTimeoutRunnable: Runnable? = null
+    private val CADENCE_STALE_DATA_TIMEOUT_MS = 3000L
+
     private var fusedLocationClient: FusedLocationProviderClient? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -643,6 +648,23 @@ class MainActivity : AppCompatActivity() {
                 if (descriptor.uuid == CLIENT_CHARACTERISTIC_CONFIG_UUID &&
                     descriptor.characteristic.uuid == CSC_MEASUREMENT_CHARACTERISTIC_UUID) {
                     Log.i(TAG, "Notifications enabled for CSC Measurement (Cadence).")
+
+                    // --- START Initial Cadence Timeout ---
+                    // At this point, we expect data to start flowing.
+                    // If no data arrives within the timeout period, set cadence to 0.
+                    // Cancel any pre-existing one just in case (though unlikely here).
+                    cadenceTimeoutRunnable?.let { cadenceTimeoutHandler.removeCallbacks(it) }
+
+                    cadenceTimeoutRunnable = Runnable {
+                        Log.i(TAG, "Initial cadence data did not arrive within ${CADENCE_STALE_DATA_TIMEOUT_MS}ms. Setting cadence to 0 RPM.")
+                        currentCadenceRpm = 0.0
+                        runOnUiThread {
+                            tvCadence.text = "0.0" // Or "Cadence: -- RPM" until first valid data
+                        }
+                    }
+                    cadenceTimeoutHandler.postDelayed(cadenceTimeoutRunnable!!, CADENCE_STALE_DATA_TIMEOUT_MS)
+                    Log.d(TAG, "Initial cadence timeout scheduled.")
+                    // --- END Initial Cadence Timeout ---
                 }
             } else {
                 Log.w(TAG, "Failed to write CCCD for cadence: ${descriptor.characteristic.uuid}, status: $status")
@@ -706,6 +728,7 @@ class MainActivity : AppCompatActivity() {
         val flags = data[0].toInt()
         val crankRevolutionDataPresent = (flags and 0x02) > 0
         var offset = 1
+        var processedNewDistinctCrankData = false
 
         // Adjust offset if wheel data is present (even if we ignore it)
         // Wheel Revolution Data Present flag is bit 0
@@ -738,14 +761,46 @@ class MainActivity : AppCompatActivity() {
 
                 if (timeDeltaSeconds > 0 && crankRevsDelta >= 0) { // Allow crankRevsDelta to be 0 for brief stops
                     currentCadenceRpm = if (crankRevsDelta == 0) 0.0 else (crankRevsDelta / timeDeltaSeconds) * 60.0
+                    processedNewDistinctCrankData = true
                     runOnUiThread {
                         tvCadence.text = currentCadenceRpm.roundToInt().toString()
+
                         updateCadenceMetrics(currentCadenceRpm)
                     }
                 }
             }
             previousCrankRevolutions = currentCrankRevs
             previousCrankEventTime = currentCrankEventTimeUnits
+
+            if (processedNewDistinctCrankData) {
+                runOnUiThread {
+                    tvCadence.text = "${currentCadenceRpm.toInt()}"
+                }
+
+                cadenceTimeoutRunnable?.let { runnable ->
+                    cadenceTimeoutHandler.removeCallbacks(runnable)
+                }
+
+                cadenceTimeoutRunnable = Runnable {
+                    Log.i(TAG, "Cadence timed out after ${CADENCE_STALE_DATA_TIMEOUT_MS}ms (no new *distinct* crank data). Setting cadence to 0 RPM.")
+                    currentCadenceRpm = 0.0
+                    runOnUiThread {
+                        tvCadence.text = "0.0"
+                    }
+                }
+
+                cadenceTimeoutHandler.postDelayed(cadenceTimeoutRunnable!!, CADENCE_STALE_DATA_TIMEOUT_MS)
+
+
+                // If new distinct crank data was processed, the fact that we cancelled the timeout
+                // at the start of this method and will re-schedule it below effectively "resets" it
+                // for another 3 seconds *from this point of valid data*.
+            } else {
+                // This 'else' block executes if the current packet, despite arriving,
+                // did NOT contain new *distinct and usable crank data* to calculate/update cadence.
+                // The timeout scheduled below will eventually fire if this state persists.
+                Log.d(TAG, "Packet received but no new/valid CSC crank data processed. Cadence timeout continues.")
+            }
             // ... (continuation from the previous parseCscMeasurementDataForCadence method)
         } else {
             // No crank data present in this packet
@@ -757,7 +812,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateSpeedMetrics(newSpeedKmh: Double) { // Called from LocationCallback
-        if (!isSessionActive) return
+        if (!isSessionActive || newSpeedKmh < 2.0) return
 
         totalSpeedSumKmh += newSpeedKmh
         speedReadingsCount++
