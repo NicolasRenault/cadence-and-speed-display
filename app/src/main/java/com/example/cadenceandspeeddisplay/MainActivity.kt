@@ -30,6 +30,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -110,13 +111,17 @@ class MainActivity : AppCompatActivity() {
     lateinit var tvTimerValue: TextView
 
     lateinit var btnSelectDevice: Button
-    lateinit var btnDisconnect: Button
+    lateinit var activeSessionButtonsContainer: LinearLayout
+    lateinit var btnStopSession: Button
+    lateinit var btnPauseSession: Button
 
     lateinit var ivBatteryIcon: ImageView
     lateinit var tvBatteryText: TextView
 
     // Session and Timer Variables
     private var sessionStartTime: Long = 0L
+    private var totalPausedTime: Long = 0L
+    private var pauseStartTime: Long = 0L
     private var isSessionActive = false
     private val timerHandler = Handler(Looper.getMainLooper())
     private lateinit var timerRunnable: Runnable
@@ -141,9 +146,15 @@ class MainActivity : AppCompatActivity() {
 
     private var fusedLocationClient: FusedLocationProviderClient? = null
 
+    private var isPaused: Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        //FLAG_KEEP_SCREEN_ON
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        Log.d(TAG, "FLAG_KEEP_SCREEN_ON added.")
 
         // Initialize UI Elements
         tvSpeedLabel = findViewById(R.id.tvSpeedLabel)
@@ -170,7 +181,10 @@ class MainActivity : AppCompatActivity() {
         tvTimerValue = findViewById(R.id.tvTimerValue)
 
         btnSelectDevice = findViewById(R.id.btnSelectDevice)
-        btnDisconnect = findViewById(R.id.btnDisconnect)
+        activeSessionButtonsContainer = findViewById(R.id.activeSessionButtonsContainer)
+        btnStopSession = findViewById(R.id.btnStopSession)
+        btnPauseSession = findViewById(R.id.btnPauseSession)
+        var btnPauseSessionParam = btnPauseSession.layoutParams as LinearLayout.LayoutParams
 
         ivBatteryIcon= findViewById(R.id.ivBatteryIcon)
         tvBatteryText = findViewById(R.id.tvBatteryLevel)
@@ -185,11 +199,12 @@ class MainActivity : AppCompatActivity() {
 
         timerRunnable = object : Runnable {
             override fun run() {
-                if (isSessionActive) {
-                    val millis = System.currentTimeMillis() - sessionStartTime
-                    val seconds = (millis / 1000) % 60
-                    val minutes = (millis / (1000 * 60)) % 60
-                    val hours = (millis / (1000 * 60 * 60)) % 24
+                if (isSessionActive && !isPaused) { // Check !isPaused here as well
+                    val currentTime = System.currentTimeMillis()
+                    val elapsedTime = currentTime - sessionStartTime - totalPausedTime // Subtract totalPausedTime
+                    val seconds = (elapsedTime / 1000) % 60
+                    val minutes = (elapsedTime / (1000 * 60)) % 60
+                    val hours = (elapsedTime / (1000 * 60 * 60)) % 24
                     tvTimerValue.text = String.format("%02d:%02d:%02d", hours, minutes, seconds)
                     timerHandler.postDelayed(this, 1000)
                 }
@@ -223,9 +238,34 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        btnDisconnect.setOnClickListener {
+        btnStopSession.setOnClickListener {
             disconnectDevice() // Handles BT disconnect if connected
             // stopSession() handles UI, timer, and location updates stop
+        }
+
+        btnPauseSession.setOnClickListener {
+            isPaused = !isPaused
+            btnPauseSession.text = if (isPaused) "Resume" else "Pause"
+
+            if (isPaused) {
+                btnPauseSession.text = "Resume"
+                btnPauseSessionParam.weight = 8.0f
+                btnStopSession.visibility = View.VISIBLE
+
+                pauseStartTime = System.currentTimeMillis()
+                timerHandler.removeCallbacks(timerRunnable)
+
+                btnPauseSession.text = "Resume"
+            } else {
+                btnPauseSession.text = "Pause"
+                btnPauseSessionParam.weight = 10.0f
+                btnStopSession.visibility = View.GONE
+
+                if (pauseStartTime > 0) {
+                    totalPausedTime += System.currentTimeMillis() - pauseStartTime
+                }
+                timerHandler.postDelayed(timerRunnable, 0)
+            }
         }
     }
 
@@ -840,7 +880,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateSpeedMetrics(newSpeedKmh: Double) { // Called from LocationCallback
-        if (!isSessionActive || newSpeedKmh < 2.0) return
+        if ((!isSessionActive || isPaused) || newSpeedKmh < 2.0 ) return
 
         totalSpeedSumKmh += newSpeedKmh
         speedReadingsCount++
@@ -854,7 +894,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateCadenceMetrics(newCadenceRpm: Double) { // Called from parseCscMeasurementDataForCadence
-        if (!isSessionActive) return
+        if (!isSessionActive || isPaused) return
 
         totalCadenceSumRpm += newCadenceRpm
         cadenceReadingsCount++
@@ -870,8 +910,11 @@ class MainActivity : AppCompatActivity() {
     private fun startSession() {
         if (!isSessionActive) {
             isSessionActive = true
+            isPaused = false
+            totalPausedTime = 0L // Reset paused time
+            pauseStartTime = 0L  // Reset pause start time
             sessionStartTime = System.currentTimeMillis()
-            timerHandler.post(timerRunnable)
+            timerHandler.postDelayed(timerRunnable, 0)
             resetMetrics() // Reset all metrics (speed and cadence)
 
             // Attempt to start location updates for speed
@@ -884,14 +927,10 @@ class MainActivity : AppCompatActivity() {
                 // You could re-request here, but the main button flow should handle initial request.
             }
 
-            //FLAG_KEEP_SCREEN_ON
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            Log.d(TAG, "FLAG_KEEP_SCREEN_ON added.")
-
             // UI changes for session active
             runOnUiThread {
                 btnSelectDevice.visibility = View.GONE
-                btnDisconnect.visibility = View.VISIBLE
+                activeSessionButtonsContainer.visibility = View.VISIBLE
             }
             Log.i(TAG, "Session Started. Timer running. Attempting GPS for speed.")
             // Cadence sensor connection is handled separately by its own connect/discover flow.
@@ -902,14 +941,12 @@ class MainActivity : AppCompatActivity() {
         if (isSessionActive) {
             isSessionActive = false
             timerHandler.removeCallbacks(timerRunnable)
+            sessionStartTime = 0L
+            totalPausedTime = 0L
+            pauseStartTime = 0L
+            btnPauseSession.text = "Pause"
             stopLocationUpdates() // Stop GPS when session stops
             Log.i(TAG, "Session Stopped.")
-        }
-
-        //FLAG_KEEP_SCREEN_ON
-        if ((window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0) {
-            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            Log.d(TAG, "FLAG_KEEP_SCREEN_ON cleared in onDestroy.")
         }
 
         // Always reset button states
@@ -917,7 +954,7 @@ class MainActivity : AppCompatActivity() {
             btnSelectDevice.text = "Start Session"
             btnSelectDevice.isEnabled = true
             btnSelectDevice.visibility = View.VISIBLE
-            btnDisconnect.visibility = View.GONE
+            activeSessionButtonsContainer.visibility = View.GONE
             if (clearUiCompletely) {
                 resetUiToDefault()
             }
@@ -999,13 +1036,7 @@ class MainActivity : AppCompatActivity() {
             bluetoothGatt = null
             Log.i(TAG, "bluetoothGatt instance for cadence sensor nullified.")
             runOnUiThread {
-                // If session is not active through user action, but cadence sensor disconnects,
-                // you might want to update cadence UI to "--"
-                if (!isSessionActive || btnDisconnect.visibility == View.GONE) {
-                    tvCadence.text = "--"
-                    tvAvgCadence.text = "--"
-                    tvMaxCadence.text = "--"
-                }
+                resetUiToDefault()
             }
         }
     }
@@ -1081,5 +1112,4 @@ class MainActivity : AppCompatActivity() {
             else -> R.drawable.ic_battery_unknown_24dp
         }
     }
-
 }

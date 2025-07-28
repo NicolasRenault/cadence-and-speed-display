@@ -379,20 +379,43 @@
             android:backgroundTint="#007AFF"
             android:textColor="#FFFFFF"/>
 
-        <Button
-            android:id="@+id/btnDisconnect"
+        <LinearLayout
+            android:id="@+id/activeSessionButtonsContainer"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Stop Session"
-            android:textSize="18sp"
-            android:paddingLeft="20dp"
-            android:paddingRight="20dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp"
-            android:backgroundTint="#FF3B30"
-            android:textColor="#FFFFFF"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:weightSum="10"
             android:visibility="gone"
-            android:layout_marginStart="16dp"/>
+            app:layout_constraintWidth_default="wrap"
+            app:layout_constraintWidth_percent="0.6">
+
+            <Button
+                android:id="@+id/btnStopSession"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="2"
+                android:backgroundTint="#FF3B30"
+                app:iconTint="@null"
+                app:icon="@drawable/ic_stop_24dp"
+                app:iconSize="32dp"
+                app:iconGravity="textStart"
+                android:visibility="gone"
+                app:iconPadding="0dp"
+                android:minWidth="96dp"
+                android:layout_marginEnd="8dp"/>
+
+            <Button
+                android:id="@+id/btnPauseSession"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="10"
+                android:text="Pause"
+                android:textSize="24sp"
+                android:backgroundTint="#FF9500"
+                android:textColor="#FFFFFF" />
+
+        </LinearLayout>
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
