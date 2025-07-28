@@ -27,6 +27,7 @@ import android.os.Looper
 import android.os.ParcelUuid
 import android.util.Log
 import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -800,6 +801,10 @@ class MainActivity : AppCompatActivity() {
                 // You could re-request here, but the main button flow should handle initial request.
             }
 
+            //FLAG_KEEP_SCREEN_ON
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            Log.d(TAG, "FLAG_KEEP_SCREEN_ON added.")
+
             // UI changes for session active
             runOnUiThread {
                 btnSelectDevice.visibility = View.GONE
@@ -817,6 +822,13 @@ class MainActivity : AppCompatActivity() {
             stopLocationUpdates() // Stop GPS when session stops
             Log.i(TAG, "Session Stopped.")
         }
+
+        //FLAG_KEEP_SCREEN_ON
+        if ((window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            Log.d(TAG, "FLAG_KEEP_SCREEN_ON cleared in onDestroy.")
+        }
+
         // Always reset button states
         runOnUiThread {
             btnSelectDevice.text = "Start Session"
