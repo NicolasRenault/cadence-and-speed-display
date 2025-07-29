@@ -8,8 +8,6 @@ An Android application designed to read data from the [Magene Cadence Sensor](ht
 
 I created this app because the official Magene application didn’t fully meet my cycling needs. I wanted something easier to see, with the speed display at the same time.
 
-This project was also a personal experiment: it’s the first time I used **Gemini AI** for roughly **80% of the development process**. Since I was working with technologies I’m not very familiar with, it was a great boost for a small personal project.
-
-Overall, I’m really happy with how it turned out.
+First time "Vibe Coding" (even if I hate the term) using Gemini integrated in Android Studio. Honestly, did great at the beginning, but you need to know what you are doing. After only a few minutes, it started deleting some part of my code that I had to manually add again and again and again.
 
 <img src="App_Screenshot.png" alt="Application Screenshot" width="300">
