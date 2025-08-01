@@ -10,27 +10,27 @@
 
         <g android:name="N-left">
             <path
-                android:fillColor="#0e4429"
+                android:fillColor="#39d353"
                 android:pathData="M0,0h119.7v491.4h-119.7z" />
         </g>
         <g android:name="N-middle">
             <path
-                android:fillColor="#105531"
+                android:fillColor="#8aeb9a"
                 android:pathData="M118.8,0 L118.8,188.3 L319,491.4 L319,304.5z" />
         </g>
         <g android:name="N-right">
             <path
-                android:fillColor="#116b3c"
+                android:fillColor="#bdf5c6"
                 android:pathData="M318.9,0h119.7v491.4h-119.7z" />
         </g>
         <g android:name="R-top">
             <path
-                android:fillColor="#168549"
+                android:fillColor="#ddfbe1"
                 android:pathData="M469.5,221.2v84.7h105.3c0,0 155.8,-3.3 155.7,-155C730.5,4.2 566.1,0 566.1,0h-96.6v99.4l79.6,-0.3c0,0 58.4,-0.6 60.5,53.9c2.1,55.3 -28,64.8 -60.5,68.2L469.5,221.2z" />
         </g>
         <g android:name="R-bottom">
             <path
-                android:fillColor="#24a55c"
+                android:fillColor="#f1fcf2"
                 android:pathData="M498.2,305.9 L600.4,491.4 L735.5,491.4 L622.1,296.8z" />
         </g>
     </group>
